@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import {
+  Alert,
   AppLayout,
   Box,
   Button,
@@ -15,6 +17,8 @@ import { AnimatePresence, motion } from "motion/react";
 import ReactMarkdown from "react-markdown";
 import Anthropic from "@anthropic-ai/sdk";
 import remarkGfm from "remark-gfm";
+import { useApiKey } from "../hooks/useApiKey";
+import { SideNav } from "../components/SideNav";
 
 export const Route = createFileRoute("/")({ component: App });
 
@@ -35,11 +39,13 @@ const SYSTEM_PROMPT = `You are an experienced technical interviewer conducting a
 `;
 
 function App() {
+  const { apiKey } = useApiKey();
   const [navOpen, setNavOpen] = useState(false);
   const [prompt, setPrompt] = useState<string>("");
   const [messages, setMessages] = useState<Array<Message>>([]);
   const [started, setStarted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
   const startedRef = useRef(false);
   const userMessageRef = useRef<HTMLDivElement>(null);
 
@@ -53,34 +59,56 @@ function App() {
     }
   }, [messages]);
 
-  const callClaude = useCallback(async (history: Message[]) => {
-    const anthropic = new Anthropic({
-      apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY,
-      dangerouslyAllowBrowser: true,
-    });
-    setLoading(true);
-    try {
-      const message = await anthropic.messages.create({
-        model: "claude-haiku-4-5",
-        max_tokens: 4096,
-        messages: history,
-        system: SYSTEM_PROMPT,
+  const callClaude = useCallback(
+    async (history: Message[]) => {
+      const anthropic = new Anthropic({
+        apiKey: apiKey ?? "",
+        dangerouslyAllowBrowser: true,
       });
-      console.log(message);
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content:
-            message.content[0].type === "text"
-              ? message.content[0].text
-              : "N/A",
-        },
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      setLoading(true);
+      setApiError(null);
+      try {
+        const message = await anthropic.messages.create({
+          model: "claude-haiku-4-5",
+          max_tokens: 4096,
+          messages: history,
+          system: SYSTEM_PROMPT,
+        });
+        console.log(message);
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content:
+              message.content[0].type === "text"
+                ? message.content[0].text
+                : "N/A",
+          },
+        ]);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const isAuthError =
+          msg.includes("401") ||
+          msg.toLowerCase().includes("auth") ||
+          msg.toLowerCase().includes("invalid") ||
+          msg.toLowerCase().includes("api key");
+        if (isAuthError) {
+          setApiError("auth");
+        } else {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `**Error:** ${msg}`,
+            },
+          ]);
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    [apiKey]
+  );
 
   const sendMessage = useCallback(async () => {
     if (!prompt.trim() || loading) return;
@@ -91,7 +119,7 @@ function App() {
     setMessages(updatedMessages);
     setPrompt("");
     await callClaude(updatedMessages);
-  }, [prompt, messages, callClaude]);
+  }, [prompt, messages, callClaude, loading]);
 
   const startInterview = useCallback(async () => {
     if (startedRef.current) return;
@@ -109,125 +137,147 @@ function App() {
     <AppLayout
       navigationOpen={navOpen}
       onNavigationChange={({ detail }) => setNavOpen(detail.open)}
+      navigation={<SideNav />}
       content={
         <ContentLayout header={<Header variant="h1">Mock Interview</Header>}>
-          <AnimatePresence mode="wait">
-            {!started ? (
-              <motion.div
-                key="start"
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.3 }}
-                className="flex flex-col items-center justify-center min-h-[60vh] gap-6 text-center max-w-[600px] mx-auto"
-              >
-                <Box variant="h2">Ready to practice?</Box>
-                <Box variant="p" color="text-body-secondary">
-                  You'll be given a systems design question and interviewed by
-                  an AI. Answer as you would in a real interview — the AI will
-                  probe your thinking, give you honest feedback, and then walk
-                  you through a model answer.
-                </Box>
-                <Button variant="primary" onClick={startInterview}>
-                  Start Interview
-                </Button>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="chat"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.3 }}
-              >
-                <div className="pb-[220px] max-w-[800px] mx-auto">
-                  <SpaceBetween size="xxl">
-                    {messages.map((message, index) => {
-                      const isLastUserMessage =
-                        message.role === "user" &&
-                        index ===
-                          messages.findLastIndex((m) => m.role === "user");
+          <SpaceBetween size="m">
+            {!apiKey && (
+              <Alert type="warning">
+                No API key configured.{" "}
+                <Link to="/api-key">Go to API Key settings</Link> to add your
+                Anthropic key.
+              </Alert>
+            )}
 
-                      return (
-                        <motion.div
-                          key={index}
-                          ref={isLastUserMessage ? userMessageRef : null}
-                          initial={{ opacity: 0, scale: 0.98 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ duration: 0.3, ease: "easeOut" }}
-                          className={`flex ${
-                            message.role === "user"
-                              ? "justify-end scroll-mt-6"
-                              : "justify-start"
-                          }`}
-                        >
+            {apiError === "auth" && (
+              <Alert type="error">
+                Your API key is invalid or has been revoked.{" "}
+                <Link to="/api-key">Update your key</Link>.
+              </Alert>
+            )}
+
+            <AnimatePresence mode="wait">
+              {!started ? (
+                <motion.div
+                  key="start"
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -12 }}
+                  transition={{ duration: 0.3 }}
+                  className="flex flex-col items-center justify-center min-h-[60vh] gap-6 text-center max-w-[600px] mx-auto"
+                >
+                  <Box variant="h2">Ready to practice?</Box>
+                  <Box variant="p" color="text-body-secondary">
+                    You'll be given a systems design question and interviewed by
+                    an AI. Answer as you would in a real interview — the AI will
+                    probe your thinking, give you honest feedback, and then walk
+                    you through a model answer.
+                  </Box>
+                  <Button
+                    variant="primary"
+                    onClick={startInterview}
+                    disabled={!apiKey}
+                  >
+                    Start Interview
+                  </Button>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="chat"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <div className="pb-[220px] max-w-[800px] mx-auto">
+                    <SpaceBetween size="xxl">
+                      {messages.map((message, index) => {
+                        const isLastUserMessage =
+                          message.role === "user" &&
+                          index ===
+                            messages.findLastIndex((m) => m.role === "user");
+
+                        return (
                           <motion.div
-                            layout
-                            className={`prose rounded-2xl max-w-none p-3 ${message.role === "user" ? "shadow-lg" : ""}`}
+                            key={index}
+                            ref={isLastUserMessage ? userMessageRef : null}
+                            initial={{ opacity: 0, scale: 0.98 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ duration: 0.3, ease: "easeOut" }}
+                            className={`flex ${
+                              message.role === "user"
+                                ? "justify-end scroll-mt-6"
+                                : "justify-start"
+                            }`}
+                          >
+                            <motion.div
+                              layout
+                              className={`prose rounded-2xl max-w-none p-3 ${message.role === "user" ? "shadow-lg" : ""}`}
+                              style={{
+                                backgroundColor:
+                                  message.role === "user"
+                                    ? awsui.colorBackgroundItemSelected
+                                    : awsui.colorBackgroundContainerContent,
+                                ...(message.role === "user" && {
+                                  border: `1px solid ${awsui.colorBorderDividerDefault}`,
+                                }),
+                              }}
+                            >
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                {message.content}
+                              </ReactMarkdown>
+                            </motion.div>
+                          </motion.div>
+                        );
+                      })}
+
+                      {loading && (
+                        <motion.div
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          className="flex justify-start"
+                        >
+                          <div
+                            className="rounded-2xl shadow-lg p-3"
                             style={{
                               backgroundColor:
-                                message.role === "user"
-                                  ? awsui.colorBackgroundItemSelected
-                                  : awsui.colorBackgroundContainerContent,
-                              ...(message.role === "user" && {
-                                border: `1px solid ${awsui.colorBorderDividerDefault}`,
-                              }),
+                                awsui.colorBackgroundContainerContent,
+                              border: `1px solid ${awsui.colorBorderDividerDefault}`,
                             }}
                           >
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                              {message.content}
-                            </ReactMarkdown>
-                          </motion.div>
+                            <Spinner />
+                          </div>
                         </motion.div>
-                      );
-                    })}
-
-                    {loading && (
-                      <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        className="flex justify-start"
-                      >
-                        <div
-                          className="rounded-2xl shadow-lg p-3"
-                          style={{
-                            backgroundColor:
-                              awsui.colorBackgroundContainerContent,
-                            border: `1px solid ${awsui.colorBorderDividerDefault}`,
-                          }}
-                        >
-                          <Spinner />
-                        </div>
-                      </motion.div>
-                    )}
-                  </SpaceBetween>
-                  {loading && <div className="h-screen" />}
-                </div>
-
-                <div
-                  className="fixed bottom-0 left-0 right-0 z-50 pb-4"
-                  style={{
-                    backgroundColor: awsui.colorBackgroundContainerContent,
-                  }}
-                >
-                  <div className="max-w-[800px] mx-auto">
-                    <PromptInput
-                      onChange={({ detail }) => setPrompt(detail.value)}
-                      value={prompt}
-                      onAction={sendMessage}
-                      actionButtonAriaLabel="Send message"
-                      actionButtonIconName="send"
-                      minRows={3}
-                      placeholder={
-                        loading ? "Waiting for response…" : "Type your reply"
-                      }
-                      disabled={loading}
-                      autoFocus
-                    />
+                      )}
+                    </SpaceBetween>
+                    {loading && <div className="h-screen" />}
                   </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+
+                  <div
+                    className="fixed bottom-0 left-0 right-0 z-50 pb-4"
+                    style={{
+                      backgroundColor: awsui.colorBackgroundContainerContent,
+                    }}
+                  >
+                    <div className="max-w-[800px] mx-auto">
+                      <PromptInput
+                        onChange={({ detail }) => setPrompt(detail.value)}
+                        value={prompt}
+                        onAction={sendMessage}
+                        actionButtonAriaLabel="Send message"
+                        actionButtonIconName="send"
+                        minRows={3}
+                        placeholder={
+                          loading ? "Waiting for response…" : "Type your reply"
+                        }
+                        disabled={loading}
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </SpaceBetween>
         </ContentLayout>
       }
     />
