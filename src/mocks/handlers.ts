@@ -1,4 +1,4 @@
-import { http, HttpResponse } from "msw";
+import { delay, http, HttpResponse } from "msw";
 
 const response1 = {
   model: "claude-haiku-4-5-20251001",
@@ -57,10 +57,14 @@ const response2 = {
 export const handlers = [
   http.post(
     "https://api.anthropic.com/v1/messages",
-    () => HttpResponse.json(response1),
-    { once: true }
+    async () => {
+      await delay(750);
+      return HttpResponse.json(response1);
+    },
+    { once: true },
   ),
-  http.post("https://api.anthropic.com/v1/messages", () =>
-    HttpResponse.json(response2)
-  ),
+  http.post("https://api.anthropic.com/v1/messages", async () => {
+    await delay(750);
+    return HttpResponse.json(response2);
+  }),
 ];

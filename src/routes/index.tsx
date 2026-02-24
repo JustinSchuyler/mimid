@@ -10,7 +10,7 @@ import {
   Spinner,
 } from "@cloudscape-design/components";
 import * as awsui from "@cloudscape-design/design-tokens/index.js";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import ReactMarkdown from "react-markdown";
 import Anthropic from "@anthropic-ai/sdk";
@@ -41,6 +41,17 @@ function App() {
   const [started, setStarted] = useState(false);
   const [loading, setLoading] = useState(false);
   const startedRef = useRef(false);
+  const userMessageRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage?.role === "user" && userMessageRef.current) {
+      userMessageRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }, [messages]);
 
   const callClaude = useCallback(async (history: Message[]) => {
     const anthropic = new Anthropic({
@@ -130,37 +141,45 @@ function App() {
               >
                 <div className="pb-[220px] max-w-[800px] mx-auto">
                   <SpaceBetween size="xxl">
-                    {messages.map((message, index) => (
-                      <motion.div
-                        key={index}
-                        initial={{ opacity: 0, scale: 0.98 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ duration: 0.3, ease: "easeOut" }}
-                        className={`flex ${
-                          message.role === "user"
-                            ? "justify-end"
-                            : "justify-start"
-                        }`}
-                      >
+                    {messages.map((message, index) => {
+                      const isLastUserMessage =
+                        message.role === "user" &&
+                        index ===
+                          messages.findLastIndex((m) => m.role === "user");
+
+                      return (
                         <motion.div
-                          layout
-                          className={`rounded-2xl max-w-none p-3 prose${message.role === "user" ? " shadow-lg" : ""}`}
-                          style={{
-                            backgroundColor:
-                              message.role === "user"
-                                ? awsui.colorBackgroundItemSelected
-                                : awsui.colorBackgroundContainerContent,
-                            ...(message.role === "user" && {
-                              border: `1px solid ${awsui.colorBorderDividerDefault}`,
-                            }),
-                          }}
+                          key={index}
+                          ref={isLastUserMessage ? userMessageRef : null}
+                          initial={{ opacity: 0, scale: 0.98 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.3, ease: "easeOut" }}
+                          className={`flex ${
+                            message.role === "user"
+                              ? "justify-end scroll-mt-6"
+                              : "justify-start"
+                          }`}
                         >
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                            {message.content}
-                          </ReactMarkdown>
+                          <motion.div
+                            layout
+                            className={`prose rounded-2xl max-w-none p-3 ${message.role === "user" ? "shadow-lg" : ""}`}
+                            style={{
+                              backgroundColor:
+                                message.role === "user"
+                                  ? awsui.colorBackgroundItemSelected
+                                  : awsui.colorBackgroundContainerContent,
+                              ...(message.role === "user" && {
+                                border: `1px solid ${awsui.colorBorderDividerDefault}`,
+                              }),
+                            }}
+                          >
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {message.content}
+                            </ReactMarkdown>
+                          </motion.div>
                         </motion.div>
-                      </motion.div>
-                    ))}
+                      );
+                    })}
 
                     {loading && (
                       <motion.div
@@ -181,6 +200,7 @@ function App() {
                       </motion.div>
                     )}
                   </SpaceBetween>
+                  {loading && <div className="h-screen" />}
                 </div>
 
                 <div
