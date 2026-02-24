@@ -1,0 +1,13 @@
+export async function enableMocking() {
+  if (process.env.NODE_ENV !== "development" && !process.env.ENABLE_MOCKING) {
+    return;
+  }
+
+  const { worker } = await import("./browser");
+
+  // `worker.start()` returns a Promise that resolves
+  // once the Service Worker is up and ready to intercept requests.
+  return worker.start({
+    onUnhandledRequest: "bypass", // or 'warn' to see unhandled requests
+  });
+}

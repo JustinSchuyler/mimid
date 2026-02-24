@@ -1,118 +1,215 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute } from "@tanstack/react-router";
 import {
-  Zap,
-  Server,
-  Route as RouteIcon,
-  Shield,
-  Waves,
-  Sparkles,
-} from 'lucide-react'
+  AppLayout,
+  Box,
+  Button,
+  ContentLayout,
+  Header,
+  PromptInput,
+  SpaceBetween,
+  Spinner,
+} from "@cloudscape-design/components";
+import * as awsui from "@cloudscape-design/design-tokens/index.js";
+import { useCallback, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import ReactMarkdown from "react-markdown";
+import Anthropic from "@anthropic-ai/sdk";
+import remarkGfm from "remark-gfm";
 
-export const Route = createFileRoute('/')({ component: App })
+export const Route = createFileRoute("/")({ component: App });
+
+interface Message {
+  role: "user" | "assistant";
+  content: string;
+}
+
+const SYSTEM_PROMPT = `You are an experienced technical interviewer conducting a systems design interview.
+
+- Present ONE realistic systems design question.
+- Respond to the user's clarifying questions.
+- Ask follow-up questions to probe at the depth of the user's knowledge.
+- Do not try to trick the user. Gather data honestly to properly assess their strengths and gaps.
+- Once satisfied, provide the user with an evaluation of their performance.
+- Follow-up with a stellar answer to your systems design question, so the user can better understand the problem.
+- End with a list of action items that the user could review to resolve their gaps.
+`;
 
 function App() {
-  const features = [
-    {
-      icon: <Zap className="w-12 h-12 text-cyan-400" />,
-      title: 'Powerful Server Functions',
-      description:
-        'Write server-side code that seamlessly integrates with your client components. Type-safe, secure, and simple.',
-    },
-    {
-      icon: <Server className="w-12 h-12 text-cyan-400" />,
-      title: 'Flexible Server Side Rendering',
-      description:
-        'Full-document SSR, streaming, and progressive enhancement out of the box. Control exactly what renders where.',
-    },
-    {
-      icon: <RouteIcon className="w-12 h-12 text-cyan-400" />,
-      title: 'API Routes',
-      description:
-        'Build type-safe API endpoints alongside your application. No separate backend needed.',
-    },
-    {
-      icon: <Shield className="w-12 h-12 text-cyan-400" />,
-      title: 'Strongly Typed Everything',
-      description:
-        'End-to-end type safety from server to client. Catch errors before they reach production.',
-    },
-    {
-      icon: <Waves className="w-12 h-12 text-cyan-400" />,
-      title: 'Full Streaming Support',
-      description:
-        'Stream data from server to client progressively. Perfect for AI applications and real-time updates.',
-    },
-    {
-      icon: <Sparkles className="w-12 h-12 text-cyan-400" />,
-      title: 'Next Generation Ready',
-      description:
-        'Built from the ground up for modern web applications. Deploy anywhere JavaScript runs.',
-    },
-  ]
+  const [navOpen, setNavOpen] = useState(false);
+  const [prompt, setPrompt] = useState<string>("");
+  const [messages, setMessages] = useState<Array<Message>>([]);
+  const [started, setStarted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const startedRef = useRef(false);
+
+  const callClaude = useCallback(async (history: Message[]) => {
+    const anthropic = new Anthropic({
+      apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY,
+      dangerouslyAllowBrowser: true,
+    });
+    setLoading(true);
+    try {
+      const message = await anthropic.messages.create({
+        model: "claude-haiku-4-5",
+        max_tokens: 4096,
+        messages: history,
+        system: SYSTEM_PROMPT,
+      });
+      console.log(message);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content:
+            message.content[0].type === "text"
+              ? message.content[0].text
+              : "N/A",
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const sendMessage = useCallback(async () => {
+    if (!prompt.trim() || loading) return;
+    const updatedMessages: Message[] = [
+      ...messages,
+      { role: "user", content: prompt },
+    ];
+    setMessages(updatedMessages);
+    setPrompt("");
+    await callClaude(updatedMessages);
+  }, [prompt, messages, callClaude]);
+
+  const startInterview = useCallback(async () => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    setStarted(true);
+    await callClaude([
+      {
+        role: "user",
+        content: "Please give me a systems design interview question.",
+      },
+    ]);
+  }, [callClaude]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
-      <section className="relative py-20 px-6 text-center overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 via-blue-500/10 to-purple-500/10"></div>
-        <div className="relative max-w-5xl mx-auto">
-          <div className="flex items-center justify-center gap-6 mb-6">
-            <img
-              src="/tanstack-circle-logo.png"
-              alt="TanStack Logo"
-              className="w-24 h-24 md:w-32 md:h-32"
-            />
-            <h1 className="text-6xl md:text-7xl font-black text-white [letter-spacing:-0.08em]">
-              <span className="text-gray-300">TANSTACK</span>{' '}
-              <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
-                START
-              </span>
-            </h1>
-          </div>
-          <p className="text-2xl md:text-3xl text-gray-300 mb-4 font-light">
-            The framework for next generation AI applications
-          </p>
-          <p className="text-lg text-gray-400 max-w-3xl mx-auto mb-8">
-            Full-stack framework powered by TanStack Router for React and Solid.
-            Build modern applications with server functions, streaming, and type
-            safety.
-          </p>
-          <div className="flex flex-col items-center gap-4">
-            <a
-              href="https://tanstack.com/start"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-8 py-3 bg-cyan-500 hover:bg-cyan-600 text-white font-semibold rounded-lg transition-colors shadow-lg shadow-cyan-500/50"
-            >
-              Documentation
-            </a>
-            <p className="text-gray-400 text-sm mt-2">
-              Begin your TanStack Start journey by editing{' '}
-              <code className="px-2 py-1 bg-slate-700 rounded text-cyan-400">
-                /src/routes/index.tsx
-              </code>
-            </p>
-          </div>
-        </div>
-      </section>
+    <AppLayout
+      navigationOpen={navOpen}
+      onNavigationChange={({ detail }) => setNavOpen(detail.open)}
+      content={
+        <ContentLayout header={<Header variant="h1">Mock Interview</Header>}>
+          <AnimatePresence mode="wait">
+            {!started ? (
+              <motion.div
+                key="start"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -12 }}
+                transition={{ duration: 0.3 }}
+                className="flex flex-col items-center justify-center min-h-[60vh] gap-6 text-center max-w-[600px] mx-auto"
+              >
+                <Box variant="h2">Ready to practice?</Box>
+                <Box variant="p" color="text-body-secondary">
+                  You'll be given a systems design question and interviewed by
+                  an AI. Answer as you would in a real interview — the AI will
+                  probe your thinking, give you honest feedback, and then walk
+                  you through a model answer.
+                </Box>
+                <Button variant="primary" onClick={startInterview}>
+                  Start Interview
+                </Button>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="chat"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3 }}
+              >
+                <div className="pb-[220px] max-w-[800px] mx-auto">
+                  <SpaceBetween size="xxl">
+                    {messages.map((message, index) => (
+                      <motion.div
+                        key={index}
+                        initial={{ opacity: 0, scale: 0.98 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.3, ease: "easeOut" }}
+                        className={`flex ${
+                          message.role === "user"
+                            ? "justify-end"
+                            : "justify-start"
+                        }`}
+                      >
+                        <motion.div
+                          layout
+                          className={`rounded-2xl max-w-none p-3 prose${message.role === "user" ? " shadow-lg" : ""}`}
+                          style={{
+                            backgroundColor:
+                              message.role === "user"
+                                ? awsui.colorBackgroundItemSelected
+                                : awsui.colorBackgroundContainerContent,
+                            ...(message.role === "user" && {
+                              border: `1px solid ${awsui.colorBorderDividerDefault}`,
+                            }),
+                          }}
+                        >
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {message.content}
+                          </ReactMarkdown>
+                        </motion.div>
+                      </motion.div>
+                    ))}
 
-      <section className="py-16 px-6 max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {features.map((feature, index) => (
-            <div
-              key={index}
-              className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl p-6 hover:border-cyan-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/10"
-            >
-              <div className="mb-4">{feature.icon}</div>
-              <h3 className="text-xl font-semibold text-white mb-3">
-                {feature.title}
-              </h3>
-              <p className="text-gray-400 leading-relaxed">
-                {feature.description}
-              </p>
-            </div>
-          ))}
-        </div>
-      </section>
-    </div>
-  )
+                    {loading && (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="flex justify-start"
+                      >
+                        <div
+                          className="rounded-2xl shadow-lg p-3"
+                          style={{
+                            backgroundColor:
+                              awsui.colorBackgroundContainerContent,
+                            border: `1px solid ${awsui.colorBorderDividerDefault}`,
+                          }}
+                        >
+                          <Spinner />
+                        </div>
+                      </motion.div>
+                    )}
+                  </SpaceBetween>
+                </div>
+
+                <div
+                  className="fixed bottom-0 left-0 right-0 z-50 pb-4"
+                  style={{
+                    backgroundColor: awsui.colorBackgroundContainerContent,
+                  }}
+                >
+                  <div className="max-w-[800px] mx-auto">
+                    <PromptInput
+                      onChange={({ detail }) => setPrompt(detail.value)}
+                      value={prompt}
+                      onAction={sendMessage}
+                      actionButtonAriaLabel="Send message"
+                      actionButtonIconName="send"
+                      minRows={3}
+                      placeholder={
+                        loading ? "Waiting for response…" : "Type your reply"
+                      }
+                      disabled={loading}
+                      autoFocus
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </ContentLayout>
+      }
+    />
+  );
 }
