@@ -6,7 +6,10 @@ import {
   Box,
   Button,
   ContentLayout,
+  FormField,
   Header,
+  KeyValuePairs,
+  Popover,
   PromptInput,
   SpaceBetween,
   Spinner,
@@ -18,7 +21,9 @@ import ReactMarkdown from "react-markdown";
 import Anthropic from "@anthropic-ai/sdk";
 import remarkGfm from "remark-gfm";
 import { useApiKey } from "../hooks/useApiKey";
+import { useUsage } from "../hooks/useUsage";
 import { SideNav } from "../components/SideNav";
+import { calculateCost, formatCost, formatTokenCount } from "../lib/pricing";
 
 export const Route = createFileRoute("/")({ component: App });
 
@@ -39,7 +44,8 @@ const SYSTEM_PROMPT = `You are an experienced technical interviewer conducting a
 `;
 
 function App() {
-  const { apiKey } = useApiKey();
+  const { apiKey, apiKeyLoaded } = useApiKey();
+  const { sessionUsage, addUsage } = useUsage();
   const [navOpen, setNavOpen] = useState(false);
   const [prompt, setPrompt] = useState<string>("");
   const [messages, setMessages] = useState<Array<Message>>([]);
@@ -68,20 +74,21 @@ function App() {
       setLoading(true);
       setApiError(null);
       try {
-        const message = await anthropic.messages.create({
+        const response = await anthropic.messages.create({
           model: "claude-haiku-4-5",
           max_tokens: 4096,
           messages: history,
           system: SYSTEM_PROMPT,
         });
-        console.log(message);
+        const { input_tokens, output_tokens } = response.usage;
+        addUsage(input_tokens, output_tokens);
         setMessages((prev) => [
           ...prev,
           {
             role: "assistant",
             content:
-              message.content[0].type === "text"
-                ? message.content[0].text
+              response.content[0].type === "text"
+                ? response.content[0].text
                 : "N/A",
           },
         ]);
@@ -97,17 +104,14 @@ function App() {
         } else {
           setMessages((prev) => [
             ...prev,
-            {
-              role: "assistant",
-              content: `**Error:** ${msg}`,
-            },
+            { role: "assistant", content: `**Error:** ${msg}` },
           ]);
         }
       } finally {
         setLoading(false);
       }
     },
-    [apiKey]
+    [apiKey, addUsage],
   );
 
   const sendMessage = useCallback(async () => {
@@ -133,6 +137,47 @@ function App() {
     ]);
   }, [callClaude]);
 
+  const sessionCost = calculateCost(
+    sessionUsage.inputTokens,
+    sessionUsage.outputTokens,
+  );
+
+  const sessionConstraint =
+    sessionUsage.inputTokens > 0 ? (
+      <Popover
+        dismissButton={false}
+        position="top"
+        size="medium"
+        triggerType="custom"
+        content={
+          <KeyValuePairs
+            columns={1}
+            items={[
+              {
+                label: "Input tokens",
+                value: sessionUsage.inputTokens.toLocaleString(),
+              },
+              {
+                label: "Output tokens",
+                value: sessionUsage.outputTokens.toLocaleString(),
+              },
+              {
+                label: "Session cost",
+                value: formatCost(sessionCost),
+              },
+            ]}
+          />
+        }
+      >
+        <span className="italic text-gray-500 underline decoration-dotted decoration-gray-500 cursor-pointer">
+          {formatTokenCount(
+            sessionUsage.inputTokens + sessionUsage.outputTokens,
+          )}{" "}
+          tokens · {formatCost(sessionCost)}
+        </span>
+      </Popover>
+    ) : undefined;
+
   return (
     <AppLayout
       navigationOpen={navOpen}
@@ -141,7 +186,7 @@ function App() {
       content={
         <ContentLayout header={<Header variant="h1">Mock Interview</Header>}>
           <SpaceBetween size="m">
-            {!apiKey && (
+            {apiKeyLoaded && !apiKey && (
               <Alert type="warning">
                 No API key configured.{" "}
                 <Link to="/api-key">Go to API Key settings</Link> to add your
@@ -259,19 +304,23 @@ function App() {
                     }}
                   >
                     <div className="max-w-[800px] mx-auto">
-                      <PromptInput
-                        onChange={({ detail }) => setPrompt(detail.value)}
-                        value={prompt}
-                        onAction={sendMessage}
-                        actionButtonAriaLabel="Send message"
-                        actionButtonIconName="send"
-                        minRows={3}
-                        placeholder={
-                          loading ? "Waiting for response…" : "Type your reply"
-                        }
-                        disabled={loading}
-                        autoFocus
-                      />
+                      <FormField constraintText={sessionConstraint} stretch>
+                        <PromptInput
+                          onChange={({ detail }) => setPrompt(detail.value)}
+                          value={prompt}
+                          onAction={sendMessage}
+                          actionButtonAriaLabel="Send message"
+                          actionButtonIconName="send"
+                          minRows={3}
+                          placeholder={
+                            loading
+                              ? "Waiting for response…"
+                              : "Type your reply"
+                          }
+                          disabled={loading}
+                          autoFocus
+                        />
+                      </FormField>
                     </div>
                   </div>
                 </motion.div>

@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const STORAGE_KEY = "mimid_anthropic_api_key";
 
 export function useApiKey() {
-  const [apiKey, setApiKey] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return localStorage.getItem(STORAGE_KEY);
-  });
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [apiKeyLoaded, setApiKeyLoaded] = useState(false);
+
+  useEffect(() => {
+    setApiKey(localStorage.getItem(STORAGE_KEY));
+    setApiKeyLoaded(true);
+  }, []);
 
   const saveKey = (key: string) => {
     localStorage.setItem(STORAGE_KEY, key);
@@ -22,5 +25,5 @@ export function useApiKey() {
     ? `sk-ant-...${apiKey.slice(-4)}`
     : null;
 
-  return { apiKey, maskedKey, saveKey, deleteKey };
+  return { apiKey, apiKeyLoaded, maskedKey, saveKey, deleteKey };
 }

@@ -11,31 +11,40 @@ import {
   FormField,
   Header,
   Input,
+  KeyValuePairs,
   Link,
   Modal,
   SpaceBetween,
 } from "@cloudscape-design/components";
 import { useState } from "react";
 import { useApiKey } from "../hooks/useApiKey";
+import { useUsage } from "../hooks/useUsage";
 import { SideNav } from "../components/SideNav";
+import { calculateCost, formatCost } from "../lib/pricing";
 
 export const Route = createFileRoute("/api-key")({ component: ApiKeyPage });
 
 function ApiKeyPage() {
   const { apiKey, maskedKey, saveKey, deleteKey } = useApiKey();
+  const { allTimeUsage, resetAllTime } = useUsage();
   const [navOpen, setNavOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [inputError, setInputError] = useState("");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [flashItems, setFlashItems] = useState<
-    Array<{ type: "success"; content: string; dismissible: boolean; id: string }>
+    Array<{
+      type: "success";
+      content: string;
+      dismissible: boolean;
+      id: string;
+    }>
   >([]);
   const [securityDismissed, setSecurityDismissed] = useState(false);
 
   const handleSave = () => {
     if (!inputValue.match(/^sk-ant-/)) {
       setInputError(
-        "Key must start with sk-ant-. Check that you copied the full key."
+        "Key must start with sk-ant-. Check that you copied the full key.",
       );
       return;
     }
@@ -182,11 +191,76 @@ function ApiKeyPage() {
                         </li>
                         <li>Sign in or create an Anthropic account.</li>
                         <li>Click "Create Key" and give it a name.</li>
-                        <li>Copy the key immediately — it won't be shown again.</li>
-                        <li>Paste it in the field above and click "Save key".</li>
+                        <li>
+                          Copy the key immediately — it won't be shown again.
+                        </li>
+                        <li>
+                          Paste it in the field above and click "Save key".
+                        </li>
                       </ol>
                     </SpaceBetween>
                   </ExpandableSection>
+
+                  <SpaceBetween size="s">
+                    <Header
+                      variant="h2"
+                      actions={
+                        allTimeUsage.inputTokens > 0 ? (
+                          <Button variant="link" onClick={resetAllTime}>
+                            Reset
+                          </Button>
+                        ) : undefined
+                      }
+                    >
+                      Cumulative usage
+                    </Header>
+                    {allTimeUsage.inputTokens === 0 &&
+                    allTimeUsage.outputTokens === 0 ? (
+                      <Box variant="p" color="text-status-inactive">
+                        No usage recorded yet. Start an interview to see costs
+                        here.
+                      </Box>
+                    ) : (
+                      <SpaceBetween size="s">
+                        <KeyValuePairs
+                          columns={3}
+                          items={[
+                            {
+                              label: "Input tokens",
+                              value: allTimeUsage.inputTokens.toLocaleString(),
+                            },
+                            {
+                              label: "Output tokens",
+                              value: allTimeUsage.outputTokens.toLocaleString(),
+                            },
+                            {
+                              label: "Estimated cost",
+                              value: formatCost(
+                                calculateCost(
+                                  allTimeUsage.inputTokens,
+                                  allTimeUsage.outputTokens,
+                                ),
+                              ),
+                            },
+                          ]}
+                        />
+                        <Box variant="small" color="text-status-inactive">
+                          Based on Claude Haiku 4.5 pricing ($0.80 / $4.00 per
+                          MTok). Input tokens accumulate across turns as the
+                          full conversation history is sent with each request.
+                          Costs are estimates —{" "}
+                          <Link
+                            href="https://platform.claude.com/docs/en/about-claude/pricing#model-pricing"
+                            external
+                            externalIconAriaLabel="Opens in a new tab"
+                          >
+                            see current rates
+                          </Link>
+                          .
+                        </Box>
+                      </SpaceBetween>
+                    )}
+                  </SpaceBetween>
                 </SpaceBetween>
               </Container>
             </SpaceBetween>
