@@ -11,6 +11,8 @@ export function SideNav() {
       activeHref={location.pathname}
       items={[
         { type: "link", text: "Mock Interview", href: "/" },
+        { type: "link", text: "History", href: "/history" },
+        { type: "divider" },
         { type: "link", text: "API Key", href: "/api-key" },
       ]}
       onFollow={(event) => {
