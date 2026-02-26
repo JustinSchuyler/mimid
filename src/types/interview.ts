@@ -11,9 +11,16 @@ export interface InterviewConfig {
   model: string;
 }
 
+// Matches Anthropic SDK's TextBlockParam | ImageBlockParam for user messages.
+// Code is stored as a text block with markdown fences (```lang\n...\n```).
+// Sketches are stored as image blocks (JPEG, base64).
+export type UserContentBlock =
+  | { type: "text"; text: string }
+  | { type: "image"; source: { type: "base64"; media_type: "image/jpeg"; data: string } };
+
 export interface Message {
   role: "user" | "assistant";
-  content: string;
+  content: string | UserContentBlock[];
 }
 
 export interface ModelTokens {

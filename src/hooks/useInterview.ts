@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Anthropic from "@anthropic-ai/sdk";
+import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import { useApiKey } from "./useApiKey";
 import { useUsage } from "./useUsage";
 import { getSession, saveSession } from "../lib/sessions";
 import { buildFirstMessage } from "../lib/prompts";
-import type { InterviewSession, Message, ModelTokens, SessionUsage } from "../types/interview";
+import type { InterviewSession, Message, ModelTokens, SessionUsage, UserContentBlock } from "../types/interview";
 
 const DEFAULT_MODEL = "claude-haiku-4-5";
 
@@ -24,6 +25,7 @@ export function useInterview(sessionId: string) {
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [sessionUsage, setSessionUsage] = useState<SessionUsage>({});
+  const [saveError, setSaveError] = useState(false);
 
   const sessionRef = useRef<InterviewSession | null>(null);
   // Mutable accumulator — avoids stale closure in callClaude
@@ -58,7 +60,7 @@ export function useInterview(sessionId: string) {
         const response = await anthropic.messages.create({
           model,
           max_tokens: 4096,
-          messages: history,
+          messages: history as MessageParam[],
           system: session.systemPrompt,
         });
         const { input_tokens, output_tokens } = response.usage;
@@ -85,7 +87,9 @@ export function useInterview(sessionId: string) {
         };
         setMessages((prevMsgs) => {
           const updated = [...prevMsgs, assistantMessage];
-          saveSession({ ...session, messages: updated, usage: newUsage });
+          if (!saveSession({ ...session, messages: updated, usage: newUsage })) {
+            setSaveError(true);
+          }
           return updated;
         });
       } catch (err: unknown) {
@@ -111,14 +115,16 @@ export function useInterview(sessionId: string) {
   );
 
   const sendMessage = useCallback(
-    async (text: string) => {
-      if (!text.trim() || loading) return;
+    async (blocks: UserContentBlock[]) => {
+      if (blocks.length === 0 || loading) return;
       const session = sessionRef.current;
       if (!session) return;
-      const userMessage: Message = { role: "user", content: text };
+      const userMessage: Message = { role: "user", content: blocks };
       const updated = [...messages, userMessage];
       setMessages(updated);
-      saveSession({ ...session, messages: updated, usage: usageRef.current });
+      if (!saveSession({ ...session, messages: updated, usage: usageRef.current })) {
+        setSaveError(true);
+      }
       await callClaude(updated);
     },
     [loading, messages, callClaude],
@@ -134,5 +140,5 @@ export function useInterview(sessionId: string) {
     callClaude([{ role: "user", content: buildFirstMessage(session.config) }]);
   }, [callClaude]);
 
-  return { messages, loading, apiError, sessionUsage, sendMessage, initInterview };
+  return { messages, loading, apiError, sessionUsage, saveError, sendMessage, initInterview };
 }

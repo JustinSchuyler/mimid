@@ -40,12 +40,22 @@ const TYPE_LABELS: Record<string, string> = {
 function InterviewPage() {
   const { id } = Route.useParams();
   const { apiKey, apiKeyLoaded } = useApiKey();
-  const { messages, loading, apiError, sessionUsage, sendMessage, initInterview } =
-    useInterview(id);
+  const {
+    messages,
+    loading,
+    apiError,
+    sessionUsage,
+    saveError,
+    sendMessage,
+    initInterview,
+  } = useInterview(id);
 
   const [navOpen, setNavOpen] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
-  const [sessionConfig, setSessionConfig] = useState<InterviewConfig | null>(null);
+  const [sessionConfig, setSessionConfig] = useState<InterviewConfig | null>(
+    null,
+  );
+  const [saveErrorDismissed, setSaveErrorDismissed] = useState(false);
 
   // Check session existence client-side
   useEffect(() => {
@@ -92,22 +102,20 @@ function InterviewPage() {
           />
         }
       >
-        <span className="italic text-gray-500 underline decoration-dotted decoration-gray-500 cursor-pointer">
+        <span className="italic text-gray-400 underline decoration-dotted decoration-gray-400 cursor-pointer text-[12px]">
           {formatTokenCount(totalTokens)} tokens · {formatCost(sessionCost)}
         </span>
       </Popover>
     ) : undefined;
 
-  const pageTitle =
-    sessionConfig
-      ? `${TYPE_LABELS[sessionConfig.type]} — ${capitalize(sessionConfig.difficulty)} — ${capitalize(sessionConfig.role)}`
-      : "Interview";
+  const pageTitle = sessionConfig
+    ? `${TYPE_LABELS[sessionConfig.type]} — ${capitalize(sessionConfig.difficulty)} — ${capitalize(sessionConfig.role)}`
+    : "Interview";
 
   const content = !sessionChecked ? null : !sessionConfig ? (
     <ContentLayout header={<Header variant="h1">Session not found</Header>}>
       <Box>
-        This session does not exist.{" "}
-        <Link to="/">Start a new interview</Link>
+        This session does not exist. <Link to="/">Start a new interview</Link>
       </Box>
     </ContentLayout>
   ) : (
@@ -124,6 +132,17 @@ function InterviewPage() {
           <Alert type="error">
             Your API key is invalid or has been revoked.{" "}
             <Link to="/api-key">Update your key</Link>.
+          </Alert>
+        )}
+        {saveError && !saveErrorDismissed && (
+          <Alert
+            type="warning"
+            dismissible
+            onDismiss={() => setSaveErrorDismissed(true)}
+          >
+            Your browser's storage is full — this session's messages could not
+            be saved and will be lost on refresh. Consider ending older sessions
+            to free up space.
           </Alert>
         )}
         <InterviewChat

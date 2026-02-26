@@ -24,7 +24,7 @@ export function getSession(id: string): InterviewSession | null {
   }
 }
 
-export function saveSession(session: InterviewSession): void {
+export function saveSession(session: InterviewSession): boolean {
   try {
     const sessions = listSessions();
     const idx = sessions.findIndex((s) => s.id === session.id);
@@ -34,8 +34,9 @@ export function saveSession(session: InterviewSession): void {
       sessions.unshift(session);
     }
     localStorage.setItem(KEY, JSON.stringify(sessions));
+    return true;
   } catch {
-    // ignore
+    return false;
   }
 }
 
