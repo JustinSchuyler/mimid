@@ -20,7 +20,12 @@ import { useState } from "react";
 import { useApiKey } from "../hooks/useApiKey";
 import { useUsage } from "../hooks/useUsage";
 import { SideNav } from "../components/SideNav";
-import { calculateCost, formatCost } from "../lib/pricing";
+import {
+  calculateCost,
+  calculateTotalCost,
+  formatCost,
+  MODEL_DISPLAY_NAMES,
+} from "../lib/pricing";
 
 export const Route = createFileRoute("/api-key")({ component: ApiKeyPage });
 
@@ -73,6 +78,10 @@ function ApiKeyPage() {
       },
     ]);
   };
+
+  const allTimeEntries = Object.entries(allTimeUsage);
+  const hasUsage = allTimeEntries.length > 0;
+  const totalCost = calculateTotalCost(allTimeUsage);
 
   return (
     <>
@@ -205,7 +214,7 @@ function ApiKeyPage() {
                     <Header
                       variant="h2"
                       actions={
-                        allTimeUsage.inputTokens > 0 ? (
+                        hasUsage ? (
                           <Button variant="link" onClick={resetAllTime}>
                             Reset
                           </Button>
@@ -214,40 +223,49 @@ function ApiKeyPage() {
                     >
                       Cumulative usage
                     </Header>
-                    {allTimeUsage.inputTokens === 0 &&
-                    allTimeUsage.outputTokens === 0 ? (
+                    {!hasUsage ? (
                       <Box variant="p" color="text-status-inactive">
                         No usage recorded yet. Start an interview to see costs
                         here.
                       </Box>
                     ) : (
-                      <SpaceBetween size="s">
-                        <KeyValuePairs
-                          columns={3}
-                          items={[
-                            {
-                              label: "Input tokens",
-                              value: allTimeUsage.inputTokens.toLocaleString(),
-                            },
-                            {
-                              label: "Output tokens",
-                              value: allTimeUsage.outputTokens.toLocaleString(),
-                            },
-                            {
-                              label: "Estimated cost",
-                              value: formatCost(
-                                calculateCost(
-                                  allTimeUsage.inputTokens,
-                                  allTimeUsage.outputTokens,
-                                ),
-                              ),
-                            },
-                          ]}
-                        />
+                      <SpaceBetween size="m">
+                        {allTimeEntries.map(([model, tokens]) => (
+                          <SpaceBetween size="xs" key={model}>
+                            <Box variant="h3" color="text-label">
+                              {MODEL_DISPLAY_NAMES[model] ?? model}
+                            </Box>
+                            <KeyValuePairs
+                              columns={3}
+                              items={[
+                                {
+                                  label: "Input tokens",
+                                  value: tokens.inputTokens.toLocaleString(),
+                                },
+                                {
+                                  label: "Output tokens",
+                                  value: tokens.outputTokens.toLocaleString(),
+                                },
+                                {
+                                  label: "Estimated cost",
+                                  value: formatCost(
+                                    calculateCost(
+                                      model,
+                                      tokens.inputTokens,
+                                      tokens.outputTokens,
+                                    ),
+                                  ),
+                                },
+                              ]}
+                            />
+                          </SpaceBetween>
+                        ))}
+                        {allTimeEntries.length > 1 && (
+                          <Box>
+                            <strong>Total: {formatCost(totalCost)}</strong>
+                          </Box>
+                        )}
                         <Box variant="small" color="text-status-inactive">
-                          Based on Claude Haiku 4.5 pricing ($0.80 / $4.00 per
-                          MTok). Input tokens accumulate across turns as the
-                          full conversation history is sent with each request.
                           Costs are estimates —{" "}
                           <Link
                             href="https://platform.claude.com/docs/en/about-claude/pricing#model-pricing"
@@ -256,7 +274,8 @@ function ApiKeyPage() {
                           >
                             see current rates
                           </Link>
-                          .
+                          . Input tokens accumulate across turns as the full
+                          conversation history is sent with each request.
                         </Box>
                       </SpaceBetween>
                     )}

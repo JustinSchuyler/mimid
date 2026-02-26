@@ -4,9 +4,18 @@ import { useApiKey } from "./useApiKey";
 import { useUsage } from "./useUsage";
 import { getSession, saveSession } from "../lib/sessions";
 import { buildFirstMessage } from "../lib/prompts";
-import type { InterviewSession, Message, SessionUsage } from "../types/interview";
+import type { InterviewSession, Message, ModelTokens, SessionUsage } from "../types/interview";
 
-const ZERO_USAGE: SessionUsage = { inputTokens: 0, outputTokens: 0 };
+const DEFAULT_MODEL = "claude-haiku-4-5";
+
+/** Migrate old flat { inputTokens, outputTokens } usage to per-model record. */
+function migrateUsage(raw: unknown): SessionUsage {
+  if (!raw || typeof raw !== "object") return {};
+  if ("inputTokens" in raw) {
+    return { [DEFAULT_MODEL]: raw as ModelTokens };
+  }
+  return raw as SessionUsage;
+}
 
 export function useInterview(sessionId: string) {
   const { apiKey } = useApiKey();
@@ -14,11 +23,11 @@ export function useInterview(sessionId: string) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
-  const [sessionUsage, setSessionUsage] = useState<SessionUsage>(ZERO_USAGE);
+  const [sessionUsage, setSessionUsage] = useState<SessionUsage>({});
 
   const sessionRef = useRef<InterviewSession | null>(null);
   // Mutable accumulator — avoids stale closure in callClaude
-  const usageRef = useRef<SessionUsage>(ZERO_USAGE);
+  const usageRef = useRef<SessionUsage>({});
   const initCalledRef = useRef(false);
 
   // Load session from localStorage client-side
@@ -28,7 +37,7 @@ export function useInterview(sessionId: string) {
     if (session && session.messages.length > 0) {
       setMessages(session.messages);
     }
-    const stored = session?.usage ?? ZERO_USAGE;
+    const stored = migrateUsage(session?.usage);
     usageRef.current = stored;
     setSessionUsage(stored);
   }, [sessionId]);
@@ -38,6 +47,7 @@ export function useInterview(sessionId: string) {
       const session = sessionRef.current;
       if (!session) return;
 
+      const model = session.config.model ?? DEFAULT_MODEL;
       const anthropic = new Anthropic({
         apiKey: apiKey ?? "",
         dangerouslyAllowBrowser: true,
@@ -46,18 +56,22 @@ export function useInterview(sessionId: string) {
       setApiError(null);
       try {
         const response = await anthropic.messages.create({
-          model: "claude-haiku-4-5",
+          model,
           max_tokens: 4096,
           messages: history,
           system: session.systemPrompt,
         });
         const { input_tokens, output_tokens } = response.usage;
-        addUsage(input_tokens, output_tokens);
+        addUsage(model, input_tokens, output_tokens);
 
-        // Accumulate usage via ref so we never read stale state
+        // Accumulate via ref so callClaude never reads stale state
+        const prev = usageRef.current[model] ?? { inputTokens: 0, outputTokens: 0 };
         const newUsage: SessionUsage = {
-          inputTokens: usageRef.current.inputTokens + input_tokens,
-          outputTokens: usageRef.current.outputTokens + output_tokens,
+          ...usageRef.current,
+          [model]: {
+            inputTokens: prev.inputTokens + input_tokens,
+            outputTokens: prev.outputTokens + output_tokens,
+          },
         };
         usageRef.current = newUsage;
         setSessionUsage(newUsage);
@@ -69,8 +83,8 @@ export function useInterview(sessionId: string) {
               ? response.content[0].text
               : "N/A",
         };
-        setMessages((prev) => {
-          const updated = [...prev, assistantMessage];
+        setMessages((prevMsgs) => {
+          const updated = [...prevMsgs, assistantMessage];
           saveSession({ ...session, messages: updated, usage: newUsage });
           return updated;
         });

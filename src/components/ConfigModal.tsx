@@ -11,6 +11,7 @@ import {
 } from "@cloudscape-design/components";
 import { useEffect, useState } from "react";
 import type { Difficulty, InterviewConfig, InterviewType, Role } from "../types/interview";
+import { MODEL_OPTIONS } from "../lib/pricing";
 
 const LANGUAGE_OPTIONS = [
   { value: "python", label: "Python" },
@@ -49,6 +50,9 @@ export function ConfigModal({ selectedType, onDismiss, onStart, apiKeyAvailable 
   const [modalLanguage, setModalLanguage] = useState<{ value: string; label: string }>(
     LANGUAGE_OPTIONS[0],
   );
+  const [modalModel, setModalModel] = useState<{ value: string; label: string; description?: string }>(
+    MODEL_OPTIONS[0],
+  );
 
   // Reset form when a new type is selected
   useEffect(() => {
@@ -57,6 +61,7 @@ export function ConfigModal({ selectedType, onDismiss, onStart, apiKeyAvailable 
       setModalDifficulty("mid");
       setModalTopic("");
       setModalLanguage(LANGUAGE_OPTIONS[0]);
+      setModalModel(MODEL_OPTIONS[0]);
     }
   }, [selectedType]);
 
@@ -68,6 +73,7 @@ export function ConfigModal({ selectedType, onDismiss, onStart, apiKeyAvailable 
       difficulty: modalDifficulty,
       topic: modalTopic,
       language: selectedType === "coding" ? modalLanguage.value : undefined,
+      model: modalModel.value,
     };
     onStart(config);
   };
@@ -151,6 +157,18 @@ export function ConfigModal({ selectedType, onDismiss, onStart, apiKeyAvailable 
               />
             </FormField>
           )}
+
+          <FormField label="Model">
+            <Select
+              selectedOption={modalModel}
+              onChange={({ detail }) =>
+                setModalModel(
+                  detail.selectedOption as { value: string; label: string; description?: string },
+                )
+              }
+              options={MODEL_OPTIONS}
+            />
+          </FormField>
         </SpaceBetween>
       </Form>
     </Modal>

@@ -1,47 +1,50 @@
 import { useCallback, useState } from "react";
+import type { ModelTokens } from "../types/interview";
 
 const STORAGE_KEY = "mimid_usage_cumulative";
 
-export interface UsageTotals {
-  inputTokens: number;
-  outputTokens: number;
-}
+export type AllTimeUsage = Record<string, ModelTokens>;
 
-function readStored(): UsageTotals {
+function readStored(): AllTimeUsage {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : { inputTokens: 0, outputTokens: 0 };
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    // Migrate old flat format: { inputTokens, outputTokens } → per-model record
+    if (typeof parsed === "object" && "inputTokens" in parsed) {
+      return { "claude-haiku-4-5": parsed as ModelTokens };
+    }
+    return parsed as AllTimeUsage;
   } catch {
-    return { inputTokens: 0, outputTokens: 0 };
+    return {};
   }
 }
 
 export function useUsage() {
-  const [sessionUsage, setSessionUsage] = useState<UsageTotals>({
-    inputTokens: 0,
-    outputTokens: 0,
-  });
-  const [allTimeUsage, setAllTimeUsage] = useState<UsageTotals>(readStored);
+  const [allTimeUsage, setAllTimeUsage] = useState<AllTimeUsage>(readStored);
 
-  const addUsage = useCallback((inputTokens: number, outputTokens: number) => {
-    setSessionUsage((prev) => ({
-      inputTokens: prev.inputTokens + inputTokens,
-      outputTokens: prev.outputTokens + outputTokens,
-    }));
-    setAllTimeUsage((prev) => {
-      const next = {
-        inputTokens: prev.inputTokens + inputTokens,
-        outputTokens: prev.outputTokens + outputTokens,
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      return next;
-    });
-  }, []);
+  const addUsage = useCallback(
+    (model: string, inputTokens: number, outputTokens: number) => {
+      setAllTimeUsage((prev) => {
+        const modelPrev = prev[model] ?? { inputTokens: 0, outputTokens: 0 };
+        const next: AllTimeUsage = {
+          ...prev,
+          [model]: {
+            inputTokens: modelPrev.inputTokens + inputTokens,
+            outputTokens: modelPrev.outputTokens + outputTokens,
+          },
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+        return next;
+      });
+    },
+    [],
+  );
 
   const resetAllTime = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
-    setAllTimeUsage({ inputTokens: 0, outputTokens: 0 });
+    setAllTimeUsage({});
   }, []);
 
-  return { sessionUsage, allTimeUsage, addUsage, resetAllTime };
+  return { allTimeUsage, addUsage, resetAllTime };
 }

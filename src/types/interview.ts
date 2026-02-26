@@ -8,6 +8,7 @@ export interface InterviewConfig {
   difficulty: Difficulty;
   topic: string;
   language?: string;
+  model: string;
 }
 
 export interface Message {
@@ -15,10 +16,13 @@ export interface Message {
   content: string;
 }
 
-export interface SessionUsage {
+export interface ModelTokens {
   inputTokens: number;
   outputTokens: number;
 }
+
+// Keyed by model ID, e.g. { "claude-haiku-4-5": { inputTokens, outputTokens } }
+export type SessionUsage = Record<string, ModelTokens>;
 
 export interface InterviewSession {
   id: string;

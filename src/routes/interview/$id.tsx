@@ -13,7 +13,12 @@ import { useEffect, useState } from "react";
 import { useApiKey } from "../../hooks/useApiKey";
 import { useInterview } from "../../hooks/useInterview";
 import { getSession } from "../../lib/sessions";
-import { calculateCost, formatCost, formatTokenCount } from "../../lib/pricing";
+import {
+  calculateTotalCost,
+  formatCost,
+  formatTokenCount,
+  MODEL_DISPLAY_NAMES,
+} from "../../lib/pricing";
 import { InterviewChat } from "../../components/InterviewChat";
 import { SideNav } from "../../components/SideNav";
 import type { InterviewConfig } from "../../types/interview";
@@ -54,13 +59,15 @@ function InterviewPage() {
     if (apiKeyLoaded) initInterview();
   }, [apiKeyLoaded, initInterview]);
 
-  const sessionCost = calculateCost(
-    sessionUsage.inputTokens,
-    sessionUsage.outputTokens,
+  const usageEntries = Object.entries(sessionUsage);
+  const totalTokens = usageEntries.reduce(
+    (sum, [, m]) => sum + m.inputTokens + m.outputTokens,
+    0,
   );
+  const sessionCost = calculateTotalCost(sessionUsage);
 
   const constraintText =
-    sessionUsage.inputTokens > 0 ? (
+    totalTokens > 0 ? (
       <Popover
         dismissButton={false}
         position="top"
@@ -70,22 +77,23 @@ function InterviewPage() {
           <KeyValuePairs
             columns={1}
             items={[
-              {
-                label: "Input tokens",
-                value: sessionUsage.inputTokens.toLocaleString(),
-              },
-              {
-                label: "Output tokens",
-                value: sessionUsage.outputTokens.toLocaleString(),
-              },
+              ...usageEntries.flatMap(([model, tokens]) => [
+                {
+                  label: `${MODEL_DISPLAY_NAMES[model] ?? model} · Input`,
+                  value: tokens.inputTokens.toLocaleString() + " tokens",
+                },
+                {
+                  label: `${MODEL_DISPLAY_NAMES[model] ?? model} · Output`,
+                  value: tokens.outputTokens.toLocaleString() + " tokens",
+                },
+              ]),
               { label: "Session cost", value: formatCost(sessionCost) },
             ]}
           />
         }
       >
         <span className="italic text-gray-500 underline decoration-dotted decoration-gray-500 cursor-pointer">
-          {formatTokenCount(sessionUsage.inputTokens + sessionUsage.outputTokens)}{" "}
-          tokens · {formatCost(sessionCost)}
+          {formatTokenCount(totalTokens)} tokens · {formatCost(sessionCost)}
         </span>
       </Popover>
     ) : undefined;
